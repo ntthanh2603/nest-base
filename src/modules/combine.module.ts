@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AbcModule } from './abc/abc.module';
 
 @Module({
-  imports: [],
+  imports: [AbcModule],
 })
 export class CombineModule {}
