@@ -1,7 +1,15 @@
 import { Module } from '@nestjs/common';
-import { AbcModule } from './abc/abc.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { RootModule } from './root/root.module';
 
 @Module({
-  imports: [AbcModule],
+  imports: [
+    AuthModule.forRoot({
+      disableExceptionFilter: true,
+    }),
+    UsersModule,
+    RootModule,
+  ],
 })
 export class CombineModule {}

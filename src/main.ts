@@ -1,12 +1,76 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
+import * as compression from 'compression';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import {
+  API_GLOBAL_PREFIX,
+  APP_NAME,
+  AUTH_INSTANCE_KEY,
+  DEFAULT_PORT,
+} from './commons/constants/app.constants';
+import * as path from 'path';
+import * as fs from 'fs';
+import { AuthGuard } from './commons/guards/auth.guard';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+    logger: ['log', 'error', 'warn', 'verbose'],
+  });
+  app.set('query parser', 'extended');
 
-  const port = process.env.PORT ?? 3000;
+  // Configure CORS
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
+  // Configure global guards
+  const reflector = app.get<Reflector>(Reflector);
 
+  app.useGlobalGuards(new AuthGuard(reflector, app.get(AUTH_INSTANCE_KEY)));
+  // Configure cookie parser
+  app.use(cookieParser());
+  // Compress responses
+  app.use(compression());
+  // Configure global validation
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
+  // Configure global prefix
+  app.setGlobalPrefix(API_GLOBAL_PREFIX, {
+    exclude: [`/${API_GLOBAL_PREFIX}/auth/{*path}`, '/'],
+  });
+  // Show Swagger UI in development: http://localhost:3000/api/docs
+  const config = new DocumentBuilder()
+    .setTitle(APP_NAME)
+    .setDescription('API documentation for the Anex application.')
+    .setVersion('1.0')
+    .setExternalDoc('Authentication Docs', 'auth/docs')
+    .build();
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup(`${API_GLOBAL_PREFIX}/docs`, app, documentFactory, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
+
+  const pathOutputOpenApi = './open-api.json';
+
+  // Create directory if it doesn't exist
+  const directoryPath = path.dirname(pathOutputOpenApi);
+  if (!fs.existsSync(directoryPath)) {
+    fs.mkdirSync(directoryPath, { recursive: true });
+  }
+
+  fs.writeFileSync(pathOutputOpenApi, JSON.stringify(documentFactory()));
+
+  const port = process.env.APP_PORT ?? DEFAULT_PORT;
   await app.listen(port);
   const logger = new Logger('Application');
   logger.log(`Application is running on url http://localhost:${port}`);
