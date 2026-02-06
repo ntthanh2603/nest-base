@@ -10,6 +10,7 @@ import type { Auth } from 'better-auth';
 export const auth: Auth = betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   database: database,
+  baseURL: process.env.BETTER_AUTH_BASE_URL || 'http://localhost:3000/api/auth',
   plugins: [
     admin({
       defaultRole: Role.USER,

@@ -10,7 +10,7 @@ import { DatabaseService } from './database.service';
       type: 'postgres',
       entities: [__dirname + '/../**/**/*.entity{.ts,.js}'],
       ...databaseConnectionConfig,
-      synchronize: true,
+      synchronize: process.env.NODE_ENV !== 'production',
     }),
   ],
   providers: [DatabaseService],

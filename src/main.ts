@@ -1,7 +1,11 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import {
+  ClassSerializerInterceptor,
+  Logger,
+  ValidationPipe,
+} from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import * as compression from 'compression';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -42,9 +46,11 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  // Configure global interceptors
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(reflector));
   // Configure global prefix
   app.setGlobalPrefix(API_GLOBAL_PREFIX, {
-    exclude: [`/${API_GLOBAL_PREFIX}/auth/{*path}`, '/'],
+    exclude: [`/${API_GLOBAL_PREFIX}/auth/*path`, '/'],
   });
   // Show Swagger UI in development: http://localhost:3000/api/docs
   const config = new DocumentBuilder()

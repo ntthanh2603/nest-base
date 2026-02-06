@@ -3,25 +3,14 @@ import type { DataSource } from 'typeorm';
 import type { Role } from '../enums/app.enum';
 
 export interface UserContextPayload {
-  expiresAt: string;
-  token: string;
-  createdAt: Date;
-  updatedAt: Date;
-  ipAddress: string;
-  userAgent: string;
-  userId: string;
   id: string;
-}
-
-export interface UserContextPayload {
   name: string;
   email: string;
   emailVerified: boolean;
-  image: string;
+  image?: string;
+  role: Role;
   createdAt: Date;
   updatedAt: Date;
-  role: Role;
-  id: string;
 }
 
 export interface ResultHandler {

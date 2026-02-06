@@ -23,3 +23,6 @@ tasks:
       - rm -rf ./husky
       - rm -rf ./node_modules
       - rm -rf ./dist
+  gen-secret:
+    cmds:
+      - npx @better-auth/cli secret

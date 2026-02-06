@@ -1,4 +1,3 @@
-import type { Session } from '@/modules/auth/entities/session.entity';
 import type { ExecutionContext } from '@nestjs/common';
 import { createParamDecorator, SetMetadata } from '@nestjs/common';
 import {
@@ -52,11 +51,9 @@ export const UserId = createParamDecorator(
  */
 export const SessionContext = createParamDecorator(
   (_data: unknown, context: ExecutionContext) => {
-    const request = context
-      .switchToHttp()
-      .getRequest<Request & { session: { session: Session | null } }>();
+    const request = context.switchToHttp().getRequest<RequestWithMetadata>();
 
-    return request.session.session;
+    return request.session;
   },
 );
 
