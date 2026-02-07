@@ -12,12 +12,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import {
   API_GLOBAL_PREFIX,
   APP_NAME,
-  AUTH_INSTANCE_KEY,
   DEFAULT_PORT,
 } from './commons/constants/app.constants';
 import * as path from 'path';
 import * as fs from 'fs';
-import { AuthGuard } from './commons/guards/auth.guard';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -34,7 +32,6 @@ async function bootstrap() {
   // Configure global guards
   const reflector = app.get<Reflector>(Reflector);
 
-  app.useGlobalGuards(new AuthGuard(reflector, app.get(AUTH_INSTANCE_KEY)));
   // Configure cookie parser
   app.use(cookieParser());
   // Compress responses

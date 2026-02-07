@@ -1,11 +1,11 @@
 import { AUTH_IGNORE_ROUTERS } from '@/commons/constants/app.constants';
 import { Role } from '@/commons/enums/app.enum';
 import { database } from '@/database/database-config';
+import type { Auth } from 'better-auth';
 import { betterAuth } from 'better-auth';
 import { admin, openAPI } from 'better-auth/plugins';
 import { randomUUID } from 'crypto';
 import 'dotenv/config';
-import type { Auth } from 'better-auth';
 
 export const auth: Auth = betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
