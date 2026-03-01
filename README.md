@@ -42,7 +42,7 @@
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/anex-hub/nest-base.git
+git clone https://github.com/ntthanh2603/nest-base.git
 cd nest-base
 ```
 
@@ -149,5 +149,5 @@ This project is [MIT licensed](LICENSE).
 ---
 
 <p align="center">
-  Built with ❤️ by <a href="https://github.com/anex-hub">Anex Hub</a>
+  Built with ❤️ by <a href="https://github.com/ntthanh2603">Nest Base Application</a>
 </p>
