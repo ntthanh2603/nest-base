@@ -1,7 +1,7 @@
 import { BaseEntity } from '@/commons/entities/base.entity';
 import { Column, Entity } from 'typeorm';
 
-@Entity('verifications')
+@Entity('verification')
 export class Verification extends BaseEntity {
   @Column('text')
   identifier: string;

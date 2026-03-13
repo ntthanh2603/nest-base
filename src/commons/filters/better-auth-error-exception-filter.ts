@@ -6,6 +6,15 @@ import { LoggerService } from '../logger/logger.service';
 import { getCorrelationId } from '../middlewares/correlation-id.middleware';
 import { APIError } from 'better-auth';
 
+interface BetterAuthError extends Error {
+  status?: number;
+  statusCode?: number;
+  body?: {
+    message?: string;
+    code?: string;
+  };
+}
+
 @Catch(APIError)
 @Injectable()
 export class BetterAuthErrorExceptionFilter implements ExceptionFilter {
@@ -17,18 +26,20 @@ export class BetterAuthErrorExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
-    const status = exception.statusCode;
-    const message = exception.body?.message || exception.message;
+    const error = exception as unknown as BetterAuthError;
+    
+    const status = error.statusCode || error.status || 500;
+    const message = error.body?.message || error.message || 'Authentication error';
     const correlationId = getCorrelationId(request);
 
     // Log async (Fire-and-Forget) - Not block request
-    this.logExceptionAsync(exception, correlationId);
+    this.logExceptionAsync(error, correlationId);
 
     // Standardized response format — consistent across all filters
     response.status(status).json({
       statusCode: status,
       message,
-      code: exception.body?.code || 'AUTH_ERROR',
+      code: error.body?.code || 'AUTH_ERROR',
     });
   }
 
@@ -36,18 +47,18 @@ export class BetterAuthErrorExceptionFilter implements ExceptionFilter {
    * Log exception async - Fire and Forget pattern
    * Not await, not block request
    */
-  private logExceptionAsync(exception: APIError, correlationId: string): void {
+  private logExceptionAsync(error: BetterAuthError, correlationId: string): void {
     // Use setImmediate to defer logging, not block current request
     setImmediate(() => {
       try {
         this.logger.error(
-          exception.message,
+          error.message,
           undefined,
           correlationId,
-          exception.stack || '',
+          error.stack || '',
         );
       } catch {
-        this.logger.errorConsoleOnly(exception.message);
+        this.logger.errorConsoleOnly(error.message);
       }
     });
   }

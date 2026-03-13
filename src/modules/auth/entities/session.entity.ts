@@ -2,7 +2,7 @@ import { BaseEntity } from '@/commons/entities/base.entity';
 import { Column, Entity, ManyToOne } from 'typeorm';
 import { User } from './user.entity';
 
-@Entity('sessions')
+@Entity('session')
 export class Session extends BaseEntity {
   @Column('timestamp')
   expiresAt: Date;

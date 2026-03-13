@@ -2,7 +2,7 @@ import { BaseEntity } from '@/commons/entities/base.entity';
 import { Column, Entity, ManyToOne } from 'typeorm';
 import { User } from './user.entity';
 
-@Entity('accounts')
+@Entity('account')
 export class Account extends BaseEntity {
   @Column('text')
   accountId: string;

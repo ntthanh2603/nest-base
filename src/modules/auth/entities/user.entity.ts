@@ -5,7 +5,7 @@ import { Column, Entity, OneToMany } from 'typeorm';
 import { Account } from './account.entity';
 import { Session } from './session.entity';
 
-@Entity('users')
+@Entity('user')
 export class User extends BaseEntity {
   @ApiProperty()
   @Column('text')
@@ -41,4 +41,7 @@ export class User extends BaseEntity {
 
   @Column('text', { nullable: true })
   banReason?: string;
+
+  @Column('boolean', { nullable: true, default: false })
+  twoFactorEnabled?: boolean;
 }
