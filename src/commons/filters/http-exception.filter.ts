@@ -28,6 +28,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     }
 
+    if (typeof message === 'string' && message.startsWith('Unexpected field')) {
+      if (message.includes('gallery')) {
+        message = 'Pet gallery supports up to 4 images (field: gallery).';
+      } else if (message.includes('avatar')) {
+        message = 'Only one avatar file is allowed (field: avatar).';
+      }
+    }
+
     // Log 500 errors to file (important), others to console only
     if (status >= 500) {
       this.logger.error(

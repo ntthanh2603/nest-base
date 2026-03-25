@@ -52,40 +52,6 @@ export class UsersService implements OnModuleInit {
     await this.syncAdmin();
   }
 
-  /**
-   * Updates the user's avatar image.
-   */
-  async updateAvatar(
-    userId: string,
-    file: {
-      buffer: Buffer;
-      originalname: string;
-      mimetype: string;
-      size: number;
-    },
-  ) {
-    const user = await this.usersRepository.findOne({
-      where: { id: userId },
-      relations: ['media'],
-    });
-    const oldMediaId = user?.mediaId;
-
-    const media = await this.storageService.uploadFile(file);
-
-    await this.usersRepository.update(userId, {
-      mediaId: media.id,
-      image: '',
-    });
-
-    if (oldMediaId) {
-      void this.storageService.deleteFile(oldMediaId);
-    }
-
-    return this.usersRepository.findOne({
-      where: { id: userId },
-      relations: ['media'],
-    });
-  }
 
   /**
    * Gets the user profile by ID.
@@ -100,13 +66,25 @@ export class UsersService implements OnModuleInit {
   /**
    * Updates the user profile.
    */
-  async updateProfile(userId: string, dto: UpdateProfileDto) {
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+    file?: Express.Multer.File,
+  ) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['media'],
+    });
+
     const updateData: Partial<User> = {};
-    
+
     if (dto.name) updateData.name = dto.name;
-    if (dto.phone !== undefined) updateData.phone = dto.phone === '' ? null : dto.phone;
-    if (dto.address !== undefined) updateData.address = dto.address === '' ? null : dto.address;
-    if (dto.cccd !== undefined) updateData.cccd = dto.cccd === '' ? null : dto.cccd;
+    if (dto.phone !== undefined)
+      updateData.phone = dto.phone === '' ? null : dto.phone;
+    if (dto.address !== undefined)
+      updateData.address = dto.address === '' ? null : dto.address;
+    if (dto.cccd !== undefined)
+      updateData.cccd = dto.cccd === '' ? null : dto.cccd;
 
     if (dto.dateOfBirth !== undefined) {
       if (dto.dateOfBirth === '') {
@@ -114,6 +92,17 @@ export class UsersService implements OnModuleInit {
       } else {
         const date = new Date(dto.dateOfBirth);
         updateData.dateOfBirth = isNaN(date.getTime()) ? null : date;
+      }
+    }
+
+    if (file) {
+      const oldMediaId = user?.mediaId;
+      const media = await this.storageService.uploadFile(file);
+      updateData.mediaId = media.id;
+      updateData.image = '';
+
+      if (oldMediaId) {
+        void this.storageService.deleteFile(oldMediaId);
       }
     }
 

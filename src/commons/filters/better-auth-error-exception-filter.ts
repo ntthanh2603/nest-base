@@ -27,9 +27,10 @@ export class BetterAuthErrorExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
     const error = exception as unknown as BetterAuthError;
-    
+
     const status = error.statusCode || error.status || 500;
-    const message = error.body?.message || error.message || 'Authentication error';
+    const message =
+      error.body?.message || error.message || 'Authentication error';
     const correlationId = getCorrelationId(request);
 
     // Log async (Fire-and-Forget) - Not block request
@@ -47,7 +48,10 @@ export class BetterAuthErrorExceptionFilter implements ExceptionFilter {
    * Log exception async - Fire and Forget pattern
    * Not await, not block request
    */
-  private logExceptionAsync(error: BetterAuthError, correlationId: string): void {
+  private logExceptionAsync(
+    error: BetterAuthError,
+    correlationId: string,
+  ): void {
     // Use setImmediate to defer logging, not block current request
     setImmediate(() => {
       try {

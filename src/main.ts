@@ -66,6 +66,17 @@ async function bootstrap() {
     .setTitle(APP_NAME)
     .setDescription('API documentation for the Nest base application.')
     .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'bearer',
+    )
     .setExternalDoc('Authentication Docs', 'auth/docs')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);

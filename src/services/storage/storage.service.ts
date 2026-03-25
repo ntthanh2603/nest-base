@@ -7,16 +7,20 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ConfigService } from '@nestjs/config';
 import * as sharp from 'sharp';
 import * as path from 'path';
+import { StoragePath } from './storage.enums';
 
 interface StorageUploadMessage {
   mediaId: string;
   fileBuffer: string;
   mimeType: string;
   filename: string;
+  folder: string;
 }
 
 @Injectable()
@@ -32,9 +36,9 @@ export class StorageService implements OnModuleInit {
     private readonly configService: ConfigService,
   ) {
     /**
-     * Initialize S3 bucket name from environment or default to 'medias'
+     * Initialize S3 bucket name from environment or default to 'media'
      */
-    this.bucket = this.configService.get<string>('S3_BUCKET', 'medias')!;
+    this.bucket = this.configService.get<string>('S3_BUCKET', 'media')!;
 
     /**
      * Configure S3 Client.
@@ -56,35 +60,34 @@ export class StorageService implements OnModuleInit {
     });
   }
 
-  async onModuleInit() {
-    // Start Kafka consumer for storage tasks
-    try {
-      await this.kafkaService.consume(
-        'storage-upload',
-        'storage-group',
-        async ({ message }) => {
-          if (!message.value) {
-            return;
-          }
+  onModuleInit() {
+    // Start Kafka consumer in background - Not await so NestJS startup is not blocked
+    this.kafkaService
+      .consume('storage-upload', 'storage-group', async ({ message }) => {
+        if (!message.value) {
+          return;
+        }
 
-          try {
-            const { mediaId, fileBuffer, mimeType, filename } = JSON.parse(
-              message.value.toString(),
-            ) as StorageUploadMessage;
-            await this.processUpload(
-              mediaId,
-              Buffer.from(fileBuffer, 'base64'),
-              mimeType,
-              filename,
-            );
-          } catch (err) {
-            this.logger.error('Error parsing Kafka message', err);
-          }
-        },
-      );
-    } catch (error) {
-      this.logger.error('Failed to start Storage Kafka consumer', error);
-    }
+        try {
+          const { mediaId, fileBuffer, mimeType, filename, folder } =
+            JSON.parse(message.value.toString()) as StorageUploadMessage;
+          await this.processUpload(
+            mediaId,
+            Buffer.from(fileBuffer, 'base64'),
+            mimeType,
+            filename,
+            folder,
+          );
+        } catch (err) {
+          this.logger.error('Error parsing Kafka message', err);
+        }
+      })
+      .catch((error) => {
+        this.logger.error(
+          'Failed to start Storage Kafka consumer in background',
+          error,
+        );
+      });
   }
 
   /**
@@ -93,6 +96,7 @@ export class StorageService implements OnModuleInit {
    * @param file The file object containing buffer, name, and mime type.
    * @param isSync If true, the file is uploaded directly to S3 and waits for completion.
    *               If false, the file metadata is saved and the upload is offloaded to Kafka.
+   * @param folder Optional folder path in the bucket to organize files.
    * @returns The media record from the database.
    */
   async uploadFile(
@@ -103,7 +107,10 @@ export class StorageService implements OnModuleInit {
       size: number;
     },
     isSync = false,
+    folder: string | StoragePath = StoragePath.UPLOADS,
   ) {
+    // 0. Clean the folder path (remove leading/trailing slashes)
+    const cleanFolder = folder.replace(/^\/+|\/+$/g, '');
     // 1. Validate file type (Currently restricted to images)
     if (!file.mimetype.startsWith('image/')) {
       throw new Error('Only image files are allowed');
@@ -125,7 +132,7 @@ export class StorageService implements OnModuleInit {
     // 2. Prepare file names and paths (Always use .webp extension)
     const originalNameWithoutExt = path.parse(file.originalname).name;
     const filename = `${Date.now()}-${originalNameWithoutExt}.webp`;
-    const key = `uploads/${filename}`;
+    const key = cleanFolder ? `${cleanFolder}/${filename}` : filename;
     const mimeType = 'image/webp';
 
     const publicUrlBase = this.configService.get<string>(
@@ -190,6 +197,7 @@ export class StorageService implements OnModuleInit {
             fileBuffer: processedBuffer.toString('base64'),
             mimeType: mimeType,
             filename,
+            folder: cleanFolder,
           }),
         },
       ]);
@@ -234,6 +242,22 @@ export class StorageService implements OnModuleInit {
   }
 
   /**
+   * Generates a pre-signed URL for a specific file key.
+   * Useful for private buckets or time-limited access.
+   *
+   * @param key The S3 key of the object.
+   * @param expiresIn Expiration time in seconds (default: 1 hour).
+   * @returns The signed URL string.
+   */
+  async getSignedUrl(key: string, expiresIn = 3600): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+    return getSignedUrl(this.s3Client, command, { expiresIn });
+  }
+
+  /**
    * Background task triggered by Kafka to process queued uploads.
    *
    * @param mediaId Reference to the DB record.
@@ -246,9 +270,11 @@ export class StorageService implements OnModuleInit {
     buffer: Buffer,
     mimeType: string,
     filename: string,
+    folder: string,
   ) {
     try {
-      const key = `uploads/${filename}`;
+      const cleanFolder = folder.replace(/^\/+|\/+$/g, '');
+      const key = cleanFolder ? `${cleanFolder}/${filename}` : filename;
 
       // Upload to SeaweedFS via S3 interface
       await this.s3Client.send(

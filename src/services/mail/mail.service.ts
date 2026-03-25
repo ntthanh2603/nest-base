@@ -22,10 +22,9 @@ export class MailService {
           otp,
           expiresIn: expiresInMinutes,
           currentYear: new Date().getFullYear(),
-          appName: this.configService.get<string>('APP_NAME', 'Nest Base'),
+          appName: this.configService.get<string>('APP_NAME', 'ILU PET'),
         },
       });
-      this.logger.log(`OTP sent to ${email}`);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -43,14 +42,15 @@ export class MailService {
         context: {
           url,
           currentYear: new Date().getFullYear(),
-          appName: this.configService.get<string>('APP_NAME', 'Nest Base'),
+          appName: this.configService.get<string>('APP_NAME', 'ILU PET'),
         },
       });
-      this.logger.log(`Verification email sent to ${email}`);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to send verification email to ${email}: ${message}`);
+      this.logger.error(
+        `Failed to send verification email to ${email}: ${message}`,
+      );
       return false;
     }
   }
@@ -64,14 +64,15 @@ export class MailService {
         context: {
           url,
           currentYear: new Date().getFullYear(),
-          appName: this.configService.get<string>('APP_NAME', 'Nest Base'),
+          appName: this.configService.get<string>('APP_NAME', 'ILU PET'),
         },
       });
-      this.logger.log(`Password reset email sent to ${email}`);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to send password reset email to ${email}: ${message}`);
+      this.logger.error(
+        `Failed to send password reset email to ${email}: ${message}`,
+      );
       return false;
     }
   }

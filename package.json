@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1010.0",
+    "@aws-sdk/s3-request-presigner": "^3.1016.0",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
@@ -33,7 +34,7 @@
     "@opensearch-project/opensearch": "^3.5.1",
     "@thallesp/nestjs-better-auth": "^2.2.5",
     "@types/cookie-parser": "^1.4.10",
-    "better-auth": "^1.4.18",
+    "better-auth": "1.4.21",
     "chalk": "^4.1.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
@@ -108,6 +109,9 @@
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/$1"
     },
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(nanoid)/)"
+    ]
   }
 }

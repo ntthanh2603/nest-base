@@ -72,6 +72,19 @@ const mediaIntent = await this.storageService.uploadFile(file, false);
 console.log(`Record created with ID: ${mediaIntent.id}. Processing in background...`);
 ```
 
+### 📢 Generating Signed URLs (Time-limited access)
+
+For private files or when you need secure, temporary access, use `getSignedUrl`.
+
+```typescript
+const key = media.s3Key; // e.g., 'uploads/1711234567-avatar.webp'
+
+// Generate a URL valid for 1 hour (3600 seconds)
+const signedUrl = await this.storageService.getSignedUrl(key, 3600);
+
+console.log(`Private access link: ${signedUrl}`);
+```
+
 ---
 
 ## 🛠️ Kafka Topic

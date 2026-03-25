@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AuthGuard } from '@thallesp/nestjs-better-auth';
+
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
@@ -27,6 +29,10 @@ import {
     CombineModule,
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: CustomRateLimitGuard,

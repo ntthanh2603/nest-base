@@ -1,6 +1,5 @@
 import { BaseEntity } from '@/commons/entities/base.entity';
-import { Entity, Column } from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
+import { Column, Entity } from 'typeorm';
 
 export enum MediaStatus {
   PENDING = 'PENDING',
@@ -10,27 +9,21 @@ export enum MediaStatus {
 
 @Entity('medias')
 export class Media extends BaseEntity {
-  @ApiProperty()
   @Column()
   filename: string;
 
-  @ApiProperty()
   @Column()
   originalName: string;
 
-  @ApiProperty()
   @Column()
   mimeType: string;
 
-  @ApiProperty()
   @Column({ type: 'bigint' })
   size: number;
 
-  @ApiProperty()
   @Column({ nullable: true })
   s3Key: string;
 
-  @ApiProperty()
   @Column({ nullable: true })
   url: string;
 

@@ -70,7 +70,9 @@ services:
       - redpanda
       - start
       - --smp
-      - "1"
+      - "2"
+      - --memory
+      - "1G"
       - --reserve-memory
       - 0M
       - --overprovisioned
