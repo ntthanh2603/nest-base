@@ -27,6 +27,7 @@ interface StorageUploadMessage {
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private s3Client: S3Client;
+  private signingClient: S3Client;
   private readonly bucket: string;
 
   constructor(
@@ -36,27 +37,40 @@ export class StorageService implements OnModuleInit {
     private readonly configService: ConfigService,
   ) {
     /**
-     * Initialize S3 bucket name from environment or default to 'media'
+     * Initialize S3 bucket name from environment or default to 'medias'
      */
-    this.bucket = this.configService.get<string>('S3_BUCKET', 'media')!;
+    this.bucket = this.configService.get<string>('S3_BUCKET', 'medias')!;
 
     /**
-     * Configure S3 Client.
-     * Use S3_ENDPOINT for custom providers (SeaweedFS, Minio).
-     * Leave S3_ENDPOINT empty for standard AWS S3.
+     * Configure S3 Clients.
+     * s3Client: Used for internal operations (upload, delete)
+     * signingClient: Used for generating public-facing presigned URLs
      */
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
+    const externalUrl =
+      this.configService.get<string>('S3_EXTERNAL_URL') || endpoint;
+    const region = this.configService.get<string>('S3_REGION', 'us-east-1');
+    const accessKeyId = this.configService.get<string>('S3_ACCESS_KEY', '');
+    const secretAccessKey = this.configService.get<string>('S3_SECRET_KEY', '');
+    const forcePathStyle =
+      this.configService.get<string>('S3_FORCE_PATH_STYLE', 'true') !== 'false';
+
+    const commonConfig = {
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle,
+      requestChecksumCalculation: 'WHEN_REQUIRED' as const,
+      responseChecksumValidation: 'WHEN_REQUIRED' as const,
+    };
+
     this.s3Client = new S3Client({
-      endpoint: endpoint || undefined,
-      region: this.configService.get<string>('S3_REGION', 'us-east-1'),
-      credentials: {
-        accessKeyId: this.configService.get<string>('S3_ACCESS_KEY', ''),
-        secretAccessKey: this.configService.get<string>('S3_SECRET_KEY', ''),
-      },
-      forcePathStyle: this.configService.get<boolean>(
-        'S3_FORCE_PATH_STYLE',
-        true,
-      ),
+      ...commonConfig,
+      endpoint: (endpoint as string) || undefined,
+    });
+
+    this.signingClient = new S3Client({
+      ...commonConfig,
+      endpoint: (externalUrl as string) || undefined,
     });
   }
 
@@ -106,7 +120,7 @@ export class StorageService implements OnModuleInit {
       mimetype: string;
       size: number;
     },
-    isSync = false,
+    isSync = true,
     folder: string | StoragePath = StoragePath.UPLOADS,
   ) {
     // 0. Clean the folder path (remove leading/trailing slashes)
@@ -135,12 +149,6 @@ export class StorageService implements OnModuleInit {
     const key = cleanFolder ? `${cleanFolder}/${filename}` : filename;
     const mimeType = 'image/webp';
 
-    const publicUrlBase = this.configService.get<string>(
-      'S3_PUBLIC_URL',
-      `http://localhost:8888/buckets/${this.bucket}`,
-    );
-    const publicUrl = `${publicUrlBase}/${key}`;
-
     // 3. Create a PENDING record in the database
     const media = this.mediaRepository.create({
       filename,
@@ -149,7 +157,7 @@ export class StorageService implements OnModuleInit {
       size: processedBuffer.length, // Store the optimized size
       status: MediaStatus.PENDING,
       s3Key: key,
-      url: publicUrl,
+      url: '', // Default URL to empty, must be retrieved via getPresignedUrl
     });
 
     const savedMedia = await this.mediaRepository.save(media);
@@ -175,7 +183,11 @@ export class StorageService implements OnModuleInit {
           status: MediaStatus.COMPLETED,
         });
 
-        return { ...savedMedia, status: MediaStatus.COMPLETED };
+        const completedMedia = Object.assign(savedMedia, {
+          status: MediaStatus.COMPLETED,
+          url: (await this.getPresignedUrl(key)) || '',
+        });
+        return completedMedia;
       } catch (error) {
         // Log the error and mark as failed
         this.logger.error(`Synchronous upload failed for ${filename}`, error);
@@ -238,23 +250,18 @@ export class StorageService implements OnModuleInit {
     }
 
     // Permanently remove the metadata record from the database
-    await this.mediaRepository.remove(media);
-  }
-
-  /**
-   * Generates a pre-signed URL for a specific file key.
-   * Useful for private buckets or time-limited access.
-   *
-   * @param key The S3 key of the object.
-   * @param expiresIn Expiration time in seconds (default: 1 hour).
-   * @returns The signed URL string.
-   */
-  async getSignedUrl(key: string, expiresIn = 3600): Promise<string> {
-    const command = new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    });
-    return getSignedUrl(this.s3Client, command, { expiresIn });
+    try {
+      await this.mediaRepository.remove(media);
+    } catch (error: unknown) {
+      const dbError = error as { code?: string };
+      if (dbError.code === '23503') {
+        this.logger.warn(
+          `Could not delete media record ${mediaId} because it is still referenced by another table. Metadata will remain but file content may have been removed.`,
+        );
+      } else {
+        throw error;
+      }
+    }
   }
 
   /**
@@ -273,6 +280,7 @@ export class StorageService implements OnModuleInit {
     folder: string,
   ) {
     try {
+      // Construct key for update
       const cleanFolder = folder.replace(/^\/+|\/+$/g, '');
       const key = cleanFolder ? `${cleanFolder}/${filename}` : filename;
 
@@ -286,17 +294,10 @@ export class StorageService implements OnModuleInit {
         }),
       );
 
-      // Construct public URL using the configured public base URL
-      const publicUrlBase = this.configService.get<string>(
-        'S3_PUBLIC_URL',
-        `http://localhost:8888/buckets/${this.bucket}`,
-      );
-      const url = `${publicUrlBase}/${key}`;
-
       // Update the record with completion details
       await this.mediaRepository.update(mediaId, {
         s3Key: key,
-        url,
+        url: '', // Keep url empty, as it should be signed on retrieval
         status: MediaStatus.COMPLETED,
       });
     } catch (error) {
@@ -304,6 +305,40 @@ export class StorageService implements OnModuleInit {
       await this.mediaRepository.update(mediaId, {
         status: MediaStatus.FAILED,
       });
+    }
+  }
+
+  /**
+   * Generates a temporary, signed URL for a file stored in S3.
+   * This is the recommended secure way to serve private files.
+   *
+   * @param key The S3 key of the object.
+   * @param expiresInSeconds Duration in seconds for the link to remain valid (default 1 hour).
+   * @returns A promise that resolves to the signed URL.
+   */
+  async getPresignedUrl(
+    key: string | null | undefined,
+    expiresInSeconds = 3600,
+  ): Promise<string | null> {
+    if (!key) {
+      return null;
+    }
+
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+
+      return await getSignedUrl(this.signingClient, command, {
+        expiresIn: expiresInSeconds,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate presigned URL for key: ${key}`,
+        error,
+      );
+      return null;
     }
   }
 }

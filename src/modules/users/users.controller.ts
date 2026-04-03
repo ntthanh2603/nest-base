@@ -1,10 +1,6 @@
 import {
   Controller,
-  ParseFilePipe,
   UploadedFile,
-  UseInterceptors,
-  MaxFileSizeValidator,
-  FileTypeValidator,
   Post,
   HttpCode,
   HttpStatus,
@@ -13,9 +9,8 @@ import {
   Patch,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { AllowAnonymous, Roles, Session } from '@thallesp/nestjs-better-auth';
-import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
 import { ALL_ROLES } from '@/commons/enums/app.enum';
 import { Doc } from '@/commons/docs/doc.decorator';
 import { User } from '@/modules/auth/entities/user.entity';
@@ -24,10 +19,15 @@ import {
   UserVerifyOtpDto,
   UserResendOtpDto,
   UpdateProfileDto,
-  UpdateProfileWithAvatarDto,
 } from './dtos/create-user.dto';
 import { DefaultMessageResponseDto } from '@/commons/dtos/default-message-response.dto';
 import { RateLimit } from '@/commons/decorators/rate-limit.decorator';
+import { ApiFile } from '@/commons/decorators/file-upload.decorator';
+import { FileFieldsValidationPipe } from '@/commons/pipes/file-validation.pipe';
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_FILE_SIZE,
+} from '@/commons/constants/app.constants';
 
 @ApiTags('Users')
 @Controller('users')
@@ -47,8 +47,7 @@ export class UsersController {
 
   @Patch('me')
   @Roles(ALL_ROLES)
-  @ApiBody({ type: UpdateProfileWithAvatarDto })
-  @UseInterceptors(FileInterceptor('avatar'))
+  @ApiFile('avatar')
   @Doc({
     summary: 'Role: All - Update profile & avatar',
     description:
@@ -60,12 +59,10 @@ export class UsersController {
     @Session() user: User,
     @Body() dto: UpdateProfileDto,
     @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|webp)' }),
-        ],
-        fileIsRequired: false,
+      new FileFieldsValidationPipe({
+        maxSize: MAX_FILE_SIZE,
+        fileType: ALLOWED_IMAGE_TYPES,
+        required: false,
       }),
     )
     file?: Express.Multer.File,
