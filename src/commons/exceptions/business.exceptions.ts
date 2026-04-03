@@ -102,3 +102,18 @@ export class InternalError extends CustomException {
     Object.setPrototypeOf(this, InternalError.prototype);
   }
 }
+
+/**
+ * Too Many Requests (429)
+ * Used for rate limiting
+ */
+export class TooManyRequestsException extends CustomException {
+  constructor(message: string = 'Too many requests') {
+    super({
+      statusCode: 429,
+      code: ErrorCode.TOO_MANY_REQUESTS,
+      message,
+    });
+    Object.setPrototypeOf(this, TooManyRequestsException.prototype);
+  }
+}

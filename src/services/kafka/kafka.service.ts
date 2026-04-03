@@ -31,6 +31,8 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       clientId,
       brokers,
       logLevel: logLevel.ERROR,
+      connectionTimeout: 10000,
+      requestTimeout: 60000,
     });
 
     this.producer = this.kafka.producer({
@@ -39,13 +41,19 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async onModuleInit() {
-    try {
-      await this.producer.connect();
-      this.logger.log('Kafka Producer connected successfully');
-    } catch (error) {
-      this.logger.error('Failed to connect Kafka Producer', error);
-    }
+  onModuleInit() {
+    // Connect producer in background - Not await so NestJS startup is not blocked
+    this.producer
+      .connect()
+      .then(() => {
+        this.logger.log('Kafka Producer connected successfully');
+      })
+      .catch((error) => {
+        this.logger.error(
+          'Failed to connect Kafka Producer in background',
+          error,
+        );
+      });
   }
 
   async onModuleDestroy() {
@@ -102,7 +110,10 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   async consume(topic: string, groupId: string, onMessage: EachMessageHandler) {
     const consumer = this.kafka.consumer({
       groupId,
-      retry: { initialRetryTime: 100, retries: 8 },
+      retry: { initialRetryTime: 100, retries: 10 },
+      sessionTimeout: 60000,
+      heartbeatInterval: 3000,
+      rebalanceTimeout: 90000,
     });
     await consumer.connect();
     await consumer.subscribe({ topic, fromBeginning: false });
@@ -121,7 +132,12 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     groupId: string,
     onBatch: EachBatchHandler,
   ) {
-    const consumer = this.kafka.consumer({ groupId });
+    const consumer = this.kafka.consumer({
+      groupId,
+      sessionTimeout: 60000,
+      heartbeatInterval: 3000,
+      rebalanceTimeout: 90000,
+    });
     await consumer.connect();
     await consumer.subscribe({ topic, fromBeginning: false });
     await consumer.run({

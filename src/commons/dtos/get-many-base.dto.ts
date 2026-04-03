@@ -62,3 +62,10 @@ export class GetManyBaseQueryParams {
   @IsEnum(SortOrder)
   sortOrder?: SortOrder = SortOrder.ASC;
 }
+
+export class GetManyWithStatusQueryParams extends GetManyBaseQueryParams {
+  @IsOptional()
+  @ApiProperty({ required: false })
+  @IsString()
+  status?: string;
+}

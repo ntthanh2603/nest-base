@@ -1,4 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  IntersectionType,
+} from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
@@ -131,3 +135,24 @@ export class UpdateProfileDto {
   @IsOptional()
   cccd?: string;
 }
+
+/**
+ * DTO for upload file (avatar)
+ */
+export class FileDto {
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'User avatar file',
+  })
+  avatar: unknown;
+}
+
+/**
+ * Combined DTO for updating user profile with avatar upload.
+ * Uses IntersectionType for clean Swagger documentation.
+ */
+export class UpdateProfileWithAvatarDto extends IntersectionType(
+  UpdateProfileDto,
+  FileDto,
+) {}

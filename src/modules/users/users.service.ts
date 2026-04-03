@@ -23,6 +23,7 @@ import {
   getRegistrationRateLimitKey,
 } from '@/utils/key-redis';
 import { generate6DigitOtp } from '@/utils/otp.util';
+import { StoragePath } from '@/services/storage/storage.enums';
 
 export interface RegistrationUserData {
   email: string;
@@ -53,60 +54,42 @@ export class UsersService implements OnModuleInit {
   }
 
   /**
-   * Updates the user's avatar image.
+   * Gets the user profile by ID.
    */
-  async updateAvatar(
-    userId: string,
-    file: {
-      buffer: Buffer;
-      originalname: string;
-      mimetype: string;
-      size: number;
-    },
-  ) {
+  async getProfile(userId: string) {
     const user = await this.usersRepository.findOne({
       where: { id: userId },
       relations: ['media'],
     });
-    const oldMediaId = user?.mediaId;
 
-    const media = await this.storageService.uploadFile(file);
-
-    await this.usersRepository.update(userId, {
-      mediaId: media.id,
-      image: '',
-    });
-
-    if (oldMediaId) {
-      void this.storageService.deleteFile(oldMediaId);
+    if (user && user.media) {
+      user.media.url =
+        (await this.storageService.getPresignedUrl(user.media.s3Key)) ||
+        user.media.url;
     }
 
-    return this.usersRepository.findOne({
-      where: { id: userId },
-      relations: ['media'],
-    });
-  }
-
-  /**
-   * Gets the user profile by ID.
-   */
-  async getProfile(userId: string) {
-    return this.usersRepository.findOne({
-      where: { id: userId },
-      relations: ['media'],
-    });
+    return user;
   }
 
   /**
    * Updates the user profile.
    */
-  async updateProfile(userId: string, dto: UpdateProfileDto) {
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+    file?: Express.Multer.File,
+  ) {
+    const user = await this.getProfile(userId);
+    const oldMediaId = user?.mediaId;
     const updateData: Partial<User> = {};
-    
+
     if (dto.name) updateData.name = dto.name;
-    if (dto.phone !== undefined) updateData.phone = dto.phone === '' ? null : dto.phone;
-    if (dto.address !== undefined) updateData.address = dto.address === '' ? null : dto.address;
-    if (dto.cccd !== undefined) updateData.cccd = dto.cccd === '' ? null : dto.cccd;
+    if (dto.phone !== undefined)
+      updateData.phone = dto.phone === '' ? null : dto.phone;
+    if (dto.address !== undefined)
+      updateData.address = dto.address === '' ? null : dto.address;
+    if (dto.cccd !== undefined)
+      updateData.cccd = dto.cccd === '' ? null : dto.cccd;
 
     if (dto.dateOfBirth !== undefined) {
       if (dto.dateOfBirth === '') {
@@ -117,9 +100,24 @@ export class UsersService implements OnModuleInit {
       }
     }
 
+    if (file) {
+      const media = await this.storageService.uploadFile(
+        file,
+        true,
+        StoragePath.USERS_AVATAR,
+      );
+      updateData.mediaId = media.id;
+      updateData.image = '';
+    }
+
     if (Object.keys(updateData).length > 0) {
       await this.usersRepository.update(userId, updateData);
     }
+
+    if (file && oldMediaId) {
+      void this.storageService.deleteFile(oldMediaId);
+    }
+
     return this.getProfile(userId);
   }
 

@@ -1,96 +1,163 @@
-# 📦 Storage Services
+# 📦 Storage & Media Services Guide
 
-This project handles file storage (primarily media/images) using an S3-compatible interface, integrated with **SeaweedFS** or **Minio**.
-
----
-
-## 🏗️ Architecture
-
-The `StorageService` is located in `src/services/storage`. It uses the `@aws-sdk/client-s3` client to interact with storage backends.
-
-- **Storage Engine**: [SeaweedFS](https://github.com/seaweedfs/seaweedfs) (via S3 Gateway)
-- **Database**: TypeORM `Media` entity for tracking file metadata.
-- **Image Processing**: [Sharp](https://sharp.pixelplumbing.com/) for optimization.
-- **Messaging**: Kafka for asynchronous upload tasks.
+This guide explains how to use the standardized media management system in the project. The system handles file uploads, image optimization, and secure serving via S3-compatible storage (SeaweedFS).
 
 ---
 
-## ✨ Features
+## 🏗️ Architecture Overview
 
-- **Multi-Flow Upload**:
-    - **Synchronous**: Directly upload to S3 and wait for completion. (Best for avatars/small files)
-    - **Asynchronous**: Register intent in DB and offload the upload to a Kafka consumer. (Best for large/batch uploads)
-- **Image Optimization**:
-    - Resize to a maximum of 2000px (width or height).
-    - Automatic conversion to **WebP** (80% quality).
-- **Metadata Management**:
-    - DB record tracks: `filename`, `originalName`, `mimeType`, `size`, `s3Key`, `url`, and `status`.
-    - Status codes: `PENDING`, `COMPLETED`, `FAILED`.
+The system centers around the `StorageService`, which interacts with:
+- **SeaweedFS**: For binary file storage.
+- **PostgreSQL**: Via the `Media` entity for metadata tracking.
+- **Sharp**: For automatic image resizing and WebP conversion.
+- **Kafka**: For offloading heavy uploads to background tasks (Asynchronous flow).
 
 ---
 
-## 🛠️ Configuration
+## 📟 Usage Guide
 
-Key environment variables in `.env`:
+To implement file uploads in your module, follow these three steps:
 
-```env
-S3_ENDPOINT=http://localhost:8888
-S3_REGION=us-east-1
-S3_ACCESS_KEY=your_access_key
-S3_SECRET_KEY=your_secret_key
-S3_BUCKET=medias
-S3_PUBLIC_URL=http://localhost:8888/buckets/medias
-S3_FORCE_PATH_STYLE=true
-```
-
----
-
-## 📟 Example Usage
-
-### 🚀 Uploading a File (Synchronous)
+### 1️⃣ Decorate the Controller
+Use our custom decorators to handle Multer configuration and Swagger (OpenAPI) documentation automatically.
 
 ```typescript
-import { StorageService } from '@/services/storage/storage.service';
+import { ApiFile, ApiFiles } from '@/commons/decorators/file-upload.decorator';
 
-@Injectable()
-export class MyService {
-  constructor(private readonly storageService: StorageService) {}
+@Controller('products')
+export class ProductsController {
+  
+  // Single file upload
+  @Post(':id/image')
+  @ApiFile('image', 1) 
+  async uploadImage(@UploadedFile() file: Express.Multer.File) { 
+    return this.service.handleUpload(file);
+  }
 
-  async processAvatar(file: Express.Multer.File) {
-    // Synchronous (awaits S3 response)
-    const media = await this.storageService.uploadFile(file, true);
-    console.log(`Uploaded to: ${media.url}`);
+  // Multiple files (max 5)
+  @Post(':id/gallery')
+  @ApiFiles('images', 5)
+  async uploadGallery(@UploadedFiles() files: Express.Multer.File[]) {
+    return this.service.handleGallery(files);
   }
 }
 ```
 
-### 🚀 Uploading a File (Asynchronous via Kafka)
+### 2️⃣ Validate the File
+Always use the `FileFieldsValidationPipe` to ensure files meet size and type requirements.
 
 ```typescript
-// Asynchronous (offloads to Kafka)
-const mediaIntent = await this.storageService.uploadFile(file, false);
-console.log(`Record created with ID: ${mediaIntent.id}. Processing in background...`);
+import { FileFieldsValidationPipe } from '@/commons/pipes/file-validation.pipe';
+import { MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES } from '@/commons/constants/app.constants';
+
+@Post('avatar')
+@ApiFile('avatar')
+async uploadAvatar(
+  @UploadedFile(
+    new FileFieldsValidationPipe({
+      maxSize: MAX_FILE_SIZE,    // e.g., 5MB
+      fileType: ALLOWED_IMAGE_TYPES, // e.g., ['image/jpeg', 'image/png']
+      required: true,
+    }),
+  )
+  file: Express.Multer.File,
+) {
+  return this.storageService.uploadFile(file);
+}
+```
+
+### 3️⃣ Process in Service
+The `uploadFile` method handles both storage and database persistence.
+
+```typescript
+// Synchronous (Default): Best for small files like avatars
+const media = await this.storageService.uploadFile(file, true, StoragePath.AVATARS);
+
+// Asynchronous: Recommended for high-traffic or large batch uploads
+// Saves PENDING record to DB and offloads S3 upload to Kafka
+const mediaPending = await this.storageService.uploadFile(file, false, StoragePath.UPLOADS);
 ```
 
 ---
 
-## 🛠️ Kafka Topic
+## 🔗 Serving Media (Presigned URLs)
 
-- **Topic**: `storage-upload`
-- **Group ID**: `storage-group`
-- **Message Format**:
-    ```json
-    {
-      "mediaId": "uuidv7-of-media-record",
-      "fileBuffer": "base64-encoded-content",
-      "mimeType": "image/webp",
-      "filename": "optimized-file-name.webp"
-    }
-    ```
+We **do not store public URLs** in the database because storage endpoints may change. Instead, we store the `s3Key`. Before returning a media record to the client, you must generate a temporary **Presigned URL**.
+
+### 🛠️ In your Service/Controller:
+```typescript
+async getProfile(userId: string) {
+  const user = await this.userRepo.findOne({ where: { id: userId }, relations: ['avatar'] });
+  
+  if (user?.avatar) {
+    // Generate a secure link valid for 1 hour
+    user.avatar.url = await this.storageService.getPresignedUrl(user.avatar.s3Key);
+  }
+  return user;
+}
+```
 
 ---
 
-## 📜 Maintenance
+## 📟 Core Service Methods
 
-- Files are organized in the S3 bucket under the `uploads/` prefix.
-- Deleting a file (`storageService.deleteFile`) removes both the S3 object and its database metadata record.
+The `StorageService` provides three primary methods for managing media across the application.
+
+### 📤 `uploadFile(file, isSync?, folder?)`
+The main entry point for all file uploads. It handles image processing, database persistence, and storage coordination.
+
+- **Parameters**:
+  - `file`: A Multer file object (must contain `buffer`, `originalname`, `mimetype`, `size`).
+  - `isSync` (Optional): 
+    - `true` (Default): App waits for the S3 upload to complete before returning. Use for critical small files (avatars).
+    - `false`: App returns quickly, offloading the S3 upload to a **Kafka background worker**. The record status will be `PENDING`.
+  - `folder` (Optional): The destination directory in the bucket. We recommend using the `StoragePath` enum (e.g., `StoragePath.AVATARS`).
+- **Processing Logic**:
+  - Validates that the file is an image.
+  - Uses **Sharp** to resize to max 2000px and convert to **WebP** (80% quality).
+  - Returns the saved `Media` entity.
+
+### 🔗 `getPresignedUrl(key, expiresInSeconds?)`
+Since we use private buckets, the files are not accessible via direct HTTP. This method generates a temporary, signed link that a browser can use to display the image.
+
+- **Parameters**:
+  - `key`: The `s3Key` stored in the `Media` entity.
+  - `expiresInSeconds` (Optional): Link duration. Defaults to `3600` (1 hour).
+- **Pro Tip**: Use this inside your controllers/services right before returning the data to the client. Do not store these URLs in the database as they expire!
+
+### 🗑️ `deleteFile(mediaId)`
+Performs a dual cleanup by removing both the physical file from S3 and its metadata from the database.
+
+- **Logic**:
+  1. Locates the `Media` record by ID.
+  2. If an `s3Key` exists, it triggers a `DeleteObjectCommand` to SeaweedFS.
+  3. If no other table references this media (foreign key check), the database record is removed.
+  4. If a reference exists (e.g., a product still points to this image), it logs a warning and keeps the metadata but the file in S3 **is still deleted**.
+
+---
+
+## 🔄 Automated Tasks (Kafka Consumer)
+
+The `StorageService` also implements `OnModuleInit` to listen for `storage-upload` messages. This is what processes your `isSync = false` uploads in the background. If a message is received:
+1. It decodes the Base64 file buffer.
+2. It uploads the file to the S3 bucket.
+3. It updates the `Media` status from `PENDING` to `COMPLETED`.
+
+---
+
+## 🛠️ Maintenance & Best Practices
+
+### Deleting Files
+Use `deleteFile(mediaId)` to clean up both storage and metadata:
+```typescript
+await this.storageService.deleteFile(media.id);
+```
+> [!NOTE]
+> If a file is still referenced by other tables (Foreign Key), `deleteFile` will remove the file from S3 but keep the database record with a warning to prevent DB constraint errors.
+
+### Folder Structure
+Always use the `StoragePath` enum to organize files:
+- `users/avatars`
+- `merchants/logos`
+- `products/galleries`
+- `uploads` (Default)

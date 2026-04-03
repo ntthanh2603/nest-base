@@ -1,10 +1,10 @@
-# NestJS Clean Architecture Boilerplate
+# 🚀 NestJS Clean Architecture Boilerplate
 
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-🚀 A production-ready NestJS Boilerplate built with **Clean Architecture** and **SOLID** principles. Designed for scalability, maintainability, and developer experience.
+🚀 A production-ready NestJS Boilerplate built with **Clean Architecture** and **SOLID** principles. Designed for scalability, maintainability, and high-performance media handling.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
@@ -13,27 +13,41 @@
 
 ---
 
+## 📑 Project Documentation
+
+Find detailed implementation guides for our core services here:
+
+- [📦 **Storage & Media**](docs/STORAGE.md) - S3, SeaweedFS, and Sharp image optimization.
+- [📡 **Kafka Messaging**](docs/KAFKA.md) - Event-driven architecture with Redpanda.
+- [🔍 **Search Engine**](docs/SEARCH.md) - Full-text search with OpenSearch.
+- [🛡️ **Authentication**](docs/AUTH.md) - Better Auth integration and security.
+- [⚠️ **Exception Handling**](docs/EXCEPTIONS.md) - Standardized error responses.
+
+---
+
 ## 🌟 Key Features
 
-- **🛡️ Better Auth**: Production-ready authentication with multi-session support, roles, and plugins.
-- **🏗️ Clean Architecture**: modular structure with clear separation of concerns.
-- **✨ NestJS 11**: Using the latest features of the NestJS framework.
-- **📦 TypeORM & Postgres**: Robust ORM integration with support for PGVector.
-- **🐳 Dockerized**: Optimization for deployment using Docker and Docker Compose.
-- **✅ Automated Testing**: Full Unit and E2E testing setup with Jest.
+- **🛡️ Better Auth**: Production-ready authentication with multi-session support and roles.
+- **📦 Advanced Storage**: S3-compatible storage (**SeaweedFS**) with automated **Sharp** image optimization (WebP).
+- **📡 Event-Driven**: High-performance messaging using **Redpanda (Kafka)** for background tasks.
+- **🔍 Full-Text Search**: Integrated **OpenSearch** cluster for lightning-fast search capabilities.
+- **🏗️ Clean Architecture**: Modular structure with strict separation of concerns.
+- **🐳 Dockerized**: Full infrastructure setup including Postgres, Redis, Kafka, and SeaweedFS.
 - **📜 Swagger**: Interactive API documentation at `/api/docs`.
 - **🚀 Taskfile**: Simplified workflow using `task` commands.
 
 ---
 
-## �️ Tech Stack
+## 🛠️ Tech Stack
 
-- **Framework**: NestJS (v11)
-- **Database**: PostgreSQL + TypeORM
-- **Authentication**: Better Auth
-- **Validation**: Class-validator & Class-transformer
-- **Docker**: Node.js 22-alpine base image
-- **Package Manager**: NPM / Bun
+- **Core**: NestJS (v11), TypeScript
+- **Database**: PostgreSQL (v18) + TypeORM
+- **Cache**: Redis (v8)
+- **Messaging**: Redpanda (Kafka-compatible)
+- **Storage**: SeaweedFS (S3-compatible)
+- **Search**: OpenSearch (v2.11)
+- **Auth**: Better Auth (v1.4)
+- **Processing**: Sharp (Image processing)
 
 ---
 
@@ -56,9 +70,9 @@ cp .env.example .env
 
 Key variables to check:
 
-- `POSTGRES_DB`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`
-- `BETTER_AUTH_SECRET`: Generate using `task gen-secret`
-- `BETTER_AUTH_BASE_URL`: Usually `http://localhost:3000/api/auth`
+- `POSTGRES_DB`, `REDIS_URL`
+- `S3_ENDPOINT`, `S3_EXTERNAL_URL`
+- `KAFKA_HOST`, `KAFKA_PORT`
 
 ### 3. Install Dependencies
 
@@ -76,17 +90,11 @@ task build   # Build the project
 task test    # Run all tests
 ```
 
-#### Using NPM
-
-```bash
-npm run start:dev
-```
-
 ---
 
 ## 🐳 Docker Usage
 
-Run the entire stack (App + Postgres + PGVector) with a single command:
+Run the entire infrastructure stack (App + Postgres + Redis + Kafka + SeaweedFS + OpenSearch) with a single command:
 
 ```bash
 docker-compose up -d --build
@@ -100,12 +108,10 @@ The application will be available at `http://localhost:3000`.
 
 ```text
 src/
-├── commons/       # Global decorators, filters, guards, interceptors, interfaces
+├── commons/       # Global decorators, filters, guards, interceptors, pipes
 ├── database/      # TypeORM configuration and Database module
 ├── modules/       # Feature modules (Auth, Users, Root)
-│   ├── auth/      # Better Auth integration & entities
-│   ├── users/     # User management logic
-│   └── root/      # System health & metadata
+├── services/      # Shared infrastructure services (Storage, Kafka, etc.)
 ├── utils/         # Helper functions
 └── main.ts        # Application entry point
 ```
@@ -129,9 +135,6 @@ npm run test
 
 # E2E tests
 npm run test:e2e
-
-# Test coverage
-npm run test:cov
 ```
 
 ---

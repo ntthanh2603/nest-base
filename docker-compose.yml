@@ -19,15 +19,22 @@ services:
     networks:
       - nest_base
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
-      interval: 1s
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h localhost -p 5432 -U ${POSTGRES_USERNAME:-postgres} -d ${POSTGRES_DB:-nest-base}",
+        ]
+      interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 10s
 
   redis:
     container_name: redis
     image: redis:8-alpine
     restart: always
+    env_file:
+      - .env
     command: redis-server --requirepass ${REDIS_PASSWORD:-password}
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -36,28 +43,45 @@ services:
     networks:
       - nest_base
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-password}", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli -a "${REDIS_PASSWORD:-password}" -h localhost -p 6379 ping | grep -q PONG',
+        ]
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 10s
 
   app:
     container_name: app
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/tomotek/tmt-ilupet-api:latest
     restart: always
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-3000}:${APP_PORT:-3000}"
     env_file:
       - .env
     environment:
       POSTGRES_HOST: postgres
-      # REDIS_URL: redis://:${REDIS_PASSWORD:-password}@redis:6379
-      S3_ENDPOINT: http://seaweedfs-filer:8333
-      S3_PUBLIC_URL: http://seaweedfs-filer:8888/buckets/medias
+      REDIS_URL: redis://:${REDIS_PASSWORD:-password}@redis:6379
+      S3_ENDPOINT: http://seaweedfs:8333
       KAFKA_HOST: redpanda
       KAFKA_PORT: 29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:${APP_PORT:-3000}/api/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - nest_base
     volumes:
@@ -66,6 +90,8 @@ services:
   redpanda:
     container_name: redpanda
     image: docker.redpanda.com/redpandadata/redpanda:v23.2.1
+    env_file:
+      - .env
     command:
       - redpanda
       - start
@@ -84,12 +110,24 @@ services:
     ports:
       - "${KAFKA_PORT:-9092}:9092"
       - "29092:29092"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "rpk cluster health --brokers=localhost:29092 >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - nest_base
 
   opensearch:
     container_name: opensearch
     image: opensearchproject/opensearch:2.11.0
+    env_file:
+      - .env
     environment:
       - cluster.name=opensearch-cluster
       - node.name=opensearch-node1
@@ -111,12 +149,24 @@ services:
     ports:
       - "${OPENSEARCH_PORT:-9200}:9200"
       - "9600:9600"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:9200/_cluster/health >/dev/null || wget -qO- http://localhost:9200/_cluster/health >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - nest_base
 
   opensearch-dashboards:
     container_name: opensearch-dashboards
     image: opensearchproject/opensearch-dashboards:2.11.0
+    env_file:
+      - .env
     volumes:
       - ./fluent-bit/opensearch_dashboards.yml:/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml
     ports:
@@ -125,16 +175,34 @@ services:
       - OPENSEARCH_HOSTS=https://opensearch:9200
       - OPENSEARCH_USERNAME=${OPENSEARCH_ADMIN_USER:-admin}
       - OPENSEARCH_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-admin}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:5601/api/status >/dev/null || wget -qO- http://localhost:5601/api/status >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - nest_base
 
   fluent-bit-shipper:
     container_name: fluent-bit-shipper
     image: fluent/fluent-bit:latest
+    env_file:
+      - .env
     volumes:
       - ./fluent-bit/shipper.conf:/fluent-bit/etc/fluent-bit.conf
       - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf
       - ./logs:/app/logs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[f]luent-bit'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - nest_base
     depends_on:
@@ -143,54 +211,50 @@ services:
   fluent-bit-indexer:
     container_name: fluent-bit-indexer
     image: fluent/fluent-bit:latest
+    env_file:
+      - .env
     volumes:
       - ./fluent-bit/indexer.conf:/fluent-bit/etc/fluent-bit.conf
       - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf
     environment:
       - OPENSEARCH_ADMIN_USER=${OPENSEARCH_ADMIN_USER:-admin}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-admin}
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[f]luent-bit'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - nest_base
     depends_on:
       - redpanda
       - opensearch
 
-  seaweedfs-master:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs-master
-    command: "master -ip=seaweedfs-master -mdir=/data"
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.59
+    container_name: seaweedfs
+    env_file:
+      - .env
+    command: 'server -master -volume -filer -s3 -s3.config=/etc/seaweedfs/s3.json'
     ports:
       - "9333:9333"
-    volumes:
-      - seaweedfs_data:/data
-    networks:
-      - nest_base
-
-  seaweedfs-volume:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs-volume
-    command: "volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume -dir=/data"
-    depends_on:
-      - seaweedfs-master
-    volumes:
-      - seaweedfs_data:/data
-    networks:
-      - nest_base
-    ports:
       - "${SEAWEEDFS_VOLUME_PORT:-8080}:8080"
-
-  seaweedfs-filer:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs-filer
-    command: 'filer -master="seaweedfs-master:9333" -s3 -s3.config="/etc/seaweedfs/s3.json"'
-    ports:
       - "${SEAWEEDFS_FILER_PORT:-8888}:8888"
       - "${SEAWEEDFS_FILER_S3_PORT:-8333}:8333"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:9333/cluster/status >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
+      - seaweedfs_data:/data
       - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json
-    depends_on:
-      - seaweedfs-master
-      - seaweedfs-volume
     networks:
       - nest_base
 

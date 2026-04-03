@@ -11,6 +11,8 @@ import * as compression from 'compression';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 
+import { SanitizeRequestPipe } from './commons/pipes/sanitize-request.pipe';
+
 import {
   API_GLOBAL_PREFIX,
   APP_NAME,
@@ -49,6 +51,7 @@ async function bootstrap() {
   app.use(compression());
   // Configure global validation
   app.useGlobalPipes(
+    new SanitizeRequestPipe(),
     new ValidationPipe({
       whitelist: true,
       transform: true,
@@ -66,6 +69,17 @@ async function bootstrap() {
     .setTitle(APP_NAME)
     .setDescription('API documentation for the Nest base application.')
     .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'bearer',
+    )
     .setExternalDoc('Authentication Docs', 'auth/docs')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
