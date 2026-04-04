@@ -39,11 +39,7 @@ import {
     },
     {
       provide: APP_FILTER,
-      useClass: AllExceptionsFilter,
-    },
-    {
-      provide: APP_FILTER,
-      useClass: BetterAuthErrorExceptionFilter,
+      useClass: CustomExceptionFilter,
     },
     {
       provide: APP_FILTER,
@@ -51,7 +47,23 @@ import {
     },
     {
       provide: APP_FILTER,
+      useClass: BetterAuthErrorExceptionFilter,
+    },
+    {
+      provide: APP_FILTER,
       useClass: CustomExceptionFilter,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: BetterAuthErrorExceptionFilter,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
     },
   ],
 })

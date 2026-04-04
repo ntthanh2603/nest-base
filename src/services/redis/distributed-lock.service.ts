@@ -8,26 +8,13 @@ export class RedisLockService {
 
   constructor(private redisService: RedisService) {}
   /**
-   * Acquires a lock with the given key and TTL.
-   *
-   * This method attempts to set a value in Redis with the given key and TTL.
-   * If the key already exists, the method will return false, indicating that
-   * the lock was not acquired. If the key is not set, the method returns true,
-   * indicating that the lock was acquired.
-   *
-   * @param key - The key to use for the lock.
-   * @param ttl - The TTL for the lock in milliseconds.
-   * @returns A promise that resolves to true if the lock was acquired, otherwise false.
+   * @deprecated Use withLock() instead. This method has a race condition.
    */
   public async lockWithTimeOut(key: string, ttl: number): Promise<boolean> {
-    const lockValue = Date.now().toString();
-    const result = await this.redisService.client.set(
-      `${this.prefix}:${key}`,
-      lockValue,
-      'PX',
-      ttl,
+    this.logger.warn(
+      `lockWithTimeOut is deprecated. Use withLock() instead for key: ${key}`,
     );
-    return result === 'OK';
+    return this.acquireLock(key, ttl);
   }
 
   /**
@@ -57,7 +44,7 @@ export class RedisLockService {
    * @param ttl - The TTL for the lock in milliseconds.
    * @returns A promise that resolves to true if the lock was acquired, otherwise false.
    */
-  private async acquireLock(key: string, ttl: number): Promise<boolean> {
+  public async acquireLock(key: string, ttl: number): Promise<boolean> {
     const lockValue = Date.now().toString();
     const result = await this.redisService.client.set(
       `${this.prefix}:${key}`,

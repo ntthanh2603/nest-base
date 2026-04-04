@@ -166,11 +166,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   public async removeKeyWithPrefix(prefix: string): Promise<number> {
     try {
       const luaScript = `
-        local keys = redis.call('KEYS', ARGV[1])
+        local keys = redis.call('SCAN', '0', 'MATCH', ARGV[1], 'COUNT', 1000)
         local deleted = 0
-        for i = 1, #keys do
-          redis.call('DEL', keys[i])
+        local cursor = keys[1]
+        local keyList = keys[2]
+        for i = 1, #keyList do
+          redis.call('DEL', keyList[i])
           deleted = deleted + 1
+        end
+        while cursor ~= '0' do
+          keys = redis.call('SCAN', cursor, 'MATCH', ARGV[1], 'COUNT', 1000)
+          cursor = keys[1]
+          keyList = keys[2]
+          for i = 1, #keyList do
+            redis.call('DEL', keyList[i])
+            deleted = deleted + 1
+          end
         end
         return deleted
       `;
@@ -179,11 +190,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const deleted = typeof result === 'number' ? result : 0;
       return deleted;
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(
-        `Failed to remove keys with prefix ${prefix}: ${errorMessage}`,
-      );
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to remove keys with prefix ${prefix}:`, error);
+      }
+      return 0;
     }
   }
 
@@ -287,10 +297,205 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     try {
       return await this.cacheClient.get(key);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to get key ${key}: ${errorMessage}`);
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to get key ${key}:`, error);
+      }
+      return null;
     }
+  }
+
+  public async set(
+    key: string,
+    value: string | number,
+  ): Promise<string | null> {
+    try {
+      return await this.cacheClient.set(key, value.toString());
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to set key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async setex(
+    key: string,
+    seconds: number,
+    value: string | number,
+  ): Promise<string | null> {
+    try {
+      return await this.cacheClient.setex(key, seconds, value.toString());
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to setex key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async del(key: string): Promise<number> {
+    try {
+      return await this.client.del(key);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to delete key ${key}:`, error);
+      }
+      return 0;
+    }
+  }
+
+  public async expire(key: string, seconds: number): Promise<number> {
+    try {
+      return await this.client.expire(key, seconds);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to set expire for key ${key}:`, error);
+      }
+      return 0;
+    }
+  }
+
+  public async pexpire(key: string, milliseconds: number): Promise<number> {
+    try {
+      return await this.client.pexpire(key, milliseconds);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to set pexpire for key ${key}:`, error);
+      }
+      return 0;
+    }
+  }
+
+  public async incr(key: string): Promise<number | null> {
+    try {
+      return await this.client.incr(key);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to increment key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async decr(key: string): Promise<number | null> {
+    try {
+      return await this.client.decr(key);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to decrement key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async publish(channel: string, message: string): Promise<number | null> {
+    try {
+      return await this.publisher.publish(channel, message);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to publish message to channel ${channel}:`, error);
+      }
+      return null;
+    }
+  }
+      return null;
+    }
+  }
+
+  public async set(
+    key: string,
+    value: string | number,
+  ): Promise<string | null> {
+    try {
+      return await this.cacheClient.set(key, value.toString());
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to set key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async setex(
+    key: string,
+    seconds: number,
+    value: string | number,
+  ): Promise<string | null> {
+    try {
+      return await this.cacheClient.setex(key, seconds, value.toString());
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to setex key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async del(key: string): Promise<number> {
+    try {
+      return await this.client.del(key);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to delete key ${key}:`, error);
+      }
+      return 0;
+    }
+  }
+
+  public async expire(key: string, seconds: number): Promise<number> {
+    try {
+      return await this.client.expire(key, seconds);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to set expire for key ${key}:`, error);
+      }
+      return 0;
+    }
+  }
+
+  public async pexpire(key: string, milliseconds: number): Promise<number> {
+    try {
+      return await this.client.pexpire(key, milliseconds);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to set pexpire for key ${key}:`, error);
+      }
+      return 0;
+    }
+  }
+
+  public async incr(key: string): Promise<number | null> {
+    try {
+      return await this.client.incr(key);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to increment key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async decr(key: string): Promise<number | null> {
+    try {
+      return await this.client.decr(key);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to decrement key ${key}:`, error);
+      }
+      return null;
+    }
+  }
+
+  public async publish(channel: string, message: string): Promise<number | null> {
+    try {
+      return await this.publisher.publish(channel, message);
+    } catch (error) {
+      if (this.configService.get('NODE_ENV') !== 'production') {
+        console.error(`Failed to publish message to channel ${channel}:`, error);
+      }
+      return null;
+    }
+  }
   }
 
   /**

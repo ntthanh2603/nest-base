@@ -15,8 +15,9 @@ import {
 export class KafkaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new LoggerService(KafkaService.name);
   private kafka: Kafka;
-  private producer: Producer;
+  private producer: Producer | null = null;
   private consumers: Consumer[] = [];
+  private isProducerReady = false;
 
   constructor(private readonly configService: ConfigService) {
     const host = this.configService.get<string>('KAFKA_HOST', 'localhost');
@@ -41,23 +42,21 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  onModuleInit() {
-    // Connect producer in background - Not await so NestJS startup is not blocked
-    this.producer
-      .connect()
-      .then(() => {
-        this.logger.log('Kafka Producer connected successfully');
-      })
-      .catch((error) => {
-        this.logger.error(
-          'Failed to connect Kafka Producer in background',
-          error,
-        );
-      });
+  async onModuleInit() {
+    try {
+      await this.producer.connect();
+      this.isProducerReady = true;
+      this.logger.log('Kafka Producer connected successfully');
+    } catch (error) {
+      this.logger.error('Failed to connect Kafka Producer', error);
+      throw error;
+    }
   }
 
   async onModuleDestroy() {
-    await this.producer.disconnect();
+    if (this.producer) {
+      await this.producer.disconnect();
+    }
     for (const consumer of this.consumers) {
       try {
         await consumer.stop();
@@ -77,10 +76,13 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     topic: string,
     messages: (Record<string, unknown> | Message)[],
   ) {
+    if (!this.isProducerReady || !this.producer) {
+      throw new Error('Kafka producer is not ready');
+    }
     try {
       await this.producer.send({
         topic,
-        acks: -1, // Wait for all replicas to acknowledge
+        acks: -1,
         messages: messages.map((m) => {
           if (m && typeof m === 'object' && 'value' in m) {
             const message = m as Message;
