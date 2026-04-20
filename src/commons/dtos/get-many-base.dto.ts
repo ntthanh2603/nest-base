@@ -57,7 +57,12 @@ export class GetManyBaseQueryParams {
   @IsString()
   sortBy: string = 'createdAt';
 
-  @ApiProperty({ required: false, example: SortOrder.DESC })
+  @ApiProperty({
+    required: false,
+    enum: SortOrder,
+    enumName: 'SortOrder',
+    example: SortOrder.DESC,
+  })
   @IsOptional()
   @IsEnum(SortOrder)
   sortOrder?: SortOrder = SortOrder.ASC;

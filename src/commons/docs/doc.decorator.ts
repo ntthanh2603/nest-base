@@ -11,6 +11,7 @@ import {
 } from '@nestjs/swagger';
 import type { ExampleObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 
+import { ErrorResponseDto } from '../dtos/error-response.dto';
 import type {
   IDocErrorOptions,
   IDocOptions,
@@ -104,6 +105,9 @@ export function Doc<T>(options?: IDocOptions<T>): MethodDecorator {
     }
 
     const decorators: MethodDecorator[] = [];
+
+    // Always include error models in schemas to ensure enums are generated for frontend
+    decorators.push(ApiExtraModels(ErrorResponseDto));
 
     // Apply common decorators
     decorators.push(...applyCommonDecorators(effectiveOptions));
@@ -233,6 +237,7 @@ function applyErrorDecorators(errors?: IDocErrorOptions[]): MethodDecorator[] {
       description: errorGroup.map((e) => e.message).join(' / '),
       content: {
         'application/json': {
+          schema: { $ref: getSchemaPath(ErrorResponseDto) },
           examples,
         },
       },

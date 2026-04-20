@@ -64,7 +64,7 @@ export class User extends BaseEntity {
   @JoinColumn({ name: 'mediaId' })
   media?: Media;
 
-  @ApiProperty({ enum: Role })
+  @ApiProperty({ enum: Role, enumName: 'Role' })
   @IsEnum(Role)
   @IsOptional()
   @Column({ type: 'enum', enum: Role, default: Role.USER })
