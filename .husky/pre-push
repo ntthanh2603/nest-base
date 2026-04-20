@@ -1,0 +1,10 @@
+# Prevent direct pushes to protected branches (main, develop)
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "main" ]; then
+  echo "🚫 Direct push to '$branch' branch is not allowed." >&2
+  echo "   Please create a feature branch and open a Pull Request." >&2
+  exit 1
+fi
+
+echo "✅ Pre-push check passed. Pushing to '$branch'..."

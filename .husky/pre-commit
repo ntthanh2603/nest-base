@@ -1,0 +1,11 @@
+# Run lint check (--fix is already included in "npm run lint" script)
+echo "Running lint check..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Lint check failed. Please fix lint errors before committing."
+  exit 1
+fi
+
+# Stage any files that were auto-fixed by ESLint
+git add -A
+echo "✅ Lint passed. Staged any auto-fixed files."
