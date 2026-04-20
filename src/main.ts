@@ -6,8 +6,8 @@ import {
   Logger,
   ValidationPipe,
 } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser';
-import * as compression from 'compression';
+import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 

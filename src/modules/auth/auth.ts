@@ -1,4 +1,4 @@
-import { Role, UserStatus } from '@/commons/enums/app.enum';
+import { Role } from '@/commons/enums/app.enum';
 import { betterAuth } from 'better-auth';
 import {
   admin,
@@ -8,12 +8,16 @@ import {
   multiSession,
   emailOTP,
   openAPI,
+  phoneNumber,
 } from 'better-auth/plugins';
 import { v7 as uuidv7 } from 'uuid';
 import type { ConfigService } from '@nestjs/config';
 import type { Pool } from 'pg';
 import type { MailService } from '@/services/mail/mail.service';
 import type { RedisService } from '@/services/redis/redis.service';
+import type { KafkaService } from '@/services/kafka/kafka.service';
+import { KafkaTopic } from '@/services/kafka/kafka.enum';
+import type { MailEventPayload } from '@/services/mail/mail.interface';
 
 export type Auth = ReturnType<typeof getAuth>;
 
@@ -22,6 +26,7 @@ export const getAuth = (
   configService: ConfigService,
   mailService: MailService,
   redisService: RedisService,
+  kafkaService: KafkaService,
 ) =>
   betterAuth({
     database,
@@ -63,18 +68,35 @@ export const getAuth = (
             user: { email: string };
             otp: string;
           }) => {
-            await mailService.sendOtp(user.email, otp);
+            const payload: MailEventPayload = {
+              pattern: 'send-otp',
+              data: { email: user.email, otp },
+              metadata: {
+                source: 'better-auth.email-otp',
+                timestamp: Date.now(),
+              },
+            };
+            await kafkaService.produce(KafkaTopic.AUTH_MAIL, [payload]);
           },
         },
       }),
       emailOTP({
         async sendVerificationOTP({ email, otp }) {
-          await mailService.sendOtp(email, otp);
+          const payload: MailEventPayload = {
+            pattern: 'send-otp',
+            data: { email, otp },
+            metadata: {
+              source: 'better-auth.verification-otp',
+              timestamp: Date.now(),
+            },
+          };
+          await kafkaService.produce(KafkaTopic.AUTH_MAIL, [payload]);
         },
+        sendVerificationOnSignUp: true,
         overrideDefaultEmailVerification: true,
-        sendVerificationOnSignUp: false,
         expiresIn: 300,
       }),
+      phoneNumber(),
       openAPI({ path: '/docs' }),
     ],
     socialProviders: {
@@ -108,52 +130,38 @@ export const getAuth = (
       max: 100,
       storage: 'secondary-storage',
       modelName: 'authRateLimit',
-      customRules: {
-        // Send OTP Verification Email (Sign Up)
-        '/email-otp/send-verification-otp': {
-          window: 60,
-          max: 1,
-        },
-        // Send OTP Login
-        '/email-otp/send-otp': {
-          window: 60,
-          max: 1,
-        },
-        // Send OTP two-factor
-        '/two-factor/send-otp': {
-          window: 60,
-          max: 1,
-        },
-        // Sign Up Email
-        '/sign-up/email': {
-          window: 60,
-          max: 1,
-        },
-        // Sign In Email
-        '/sign-in/email': {
-          window: 60,
-          max: 5,
-        },
-        // Sign Up Google
-        '/sign-up/google': {
-          window: 60,
-          max: 5,
-        },
-        // Sign Up Apple
-        '/sign-up/apple': {
-          window: 60,
-          max: 5,
-        },
-        // Forgot Password
-        '/forgot-password': {
-          window: 60,
-          max: 1,
-        },
-        // Reset Password
-        '/reset-password': {
-          window: 60,
-          max: 1,
-        },
+    },
+    hooks: {
+      before: async (context) => {
+        if (!context.request) return { context };
+
+        // Lấy pathname từ URL của yêu cầu
+        const url = new URL(context.request.url);
+
+        // Kiểm tra nếu là endpoint đăng ký email
+        if (url.pathname.endsWith('/sign-up/email')) {
+          const body = context.body as Record<string, unknown> | undefined;
+          const email = body?.email;
+
+          if (typeof email === 'string') {
+            // Check if user exists but is NOT verified
+            const userResult = await database.query(
+              'SELECT id, "emailVerified" FROM "user" WHERE LOWER(email) = $1',
+              [email.toLowerCase()],
+            );
+            const user = userResult.rows[0] as
+              | { id: string; emailVerified: boolean }
+              | undefined;
+
+            if (user && !user.emailVerified) {
+              // Delete the unverified user to allow a fresh sign-up
+              await database.query('DELETE FROM "user" WHERE id = $1', [
+                user.id,
+              ]);
+            }
+          }
+        }
+        return { context };
       },
     },
     emailAndPassword: {
@@ -167,12 +175,20 @@ export const getAuth = (
         user: { email: string };
         url: string;
       }) => {
-        await mailService.sendPasswordReset(user.email, url);
+        const payload: MailEventPayload = {
+          pattern: 'send-password-reset',
+          data: { email: user.email, url },
+          metadata: {
+            source: 'better-auth.password-reset',
+            timestamp: Date.now(),
+          },
+        };
+        await kafkaService.produce(KafkaTopic.AUTH_MAIL, [payload]);
       },
     },
     emailVerification: {
-      sendOnSignUp: false,
-      autoSignInAfterVerification: false,
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
     },
     session: {
       cookieCache: { enabled: true, maxAge: 300 },
@@ -186,8 +202,9 @@ export const getAuth = (
       additionalFields: {
         role: { type: 'string', defaultValue: Role.USER },
         twoFactorEnabled: { type: 'boolean', defaultValue: false },
+        phoneNumber: { type: 'string' },
         mediaId: { type: 'string' },
-        status: { type: 'string', defaultValue: UserStatus.ACTIVE },
+        language: { type: 'string', defaultValue: 'en' },
         banned: { type: 'boolean', defaultValue: false },
         banReason: { type: 'string' },
         banExpires: { type: 'date' },

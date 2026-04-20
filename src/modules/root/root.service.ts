@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import {
   HealthCheckService,
   TypeOrmHealthIndicator,
-  RedisHealthIndicator,
   HealthCheck,
   HealthCheckResult,
 } from '@nestjs/terminus';
@@ -13,7 +12,6 @@ export class RootService {
   constructor(
     private readonly health: HealthCheckService,
     private readonly db: TypeOrmHealthIndicator,
-    private readonly redisHealth: RedisHealthIndicator,
     private readonly redisService: RedisService,
   ) {}
 
@@ -21,11 +19,11 @@ export class RootService {
   public async getHealth(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.db.pingCheck('database'),
-      () =>
-        this.redisHealth.check('redis', {
-          type: 'redis',
-          client: this.redisService.client,
-        }),
+      () => {
+        const isReady = this.redisService.client.status === 'ready';
+        if (isReady) return { redis: { status: 'up' } };
+        return { redis: { status: 'down', message: 'Redis is not ready' } };
+      },
     ]);
   }
 }

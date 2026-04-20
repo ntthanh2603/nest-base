@@ -1,71 +1,78 @@
 import { BaseEntity } from '@/commons/entities/base.entity';
-import { Role, UserStatus } from '@/commons/enums/app.enum';
-import { ApiProperty } from '@nestjs/swagger';
+import { Role } from '@/commons/enums/app.enum';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Column, Entity, OneToMany } from 'typeorm';
 import { Account } from './account.entity';
 import { Session } from './session.entity';
 import { Media } from '@/services/storage/entities/media.entity';
 import { JoinColumn, OneToOne } from 'typeorm';
+import {
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 @Entity('user')
 export class User extends BaseEntity {
-  @ApiProperty({ description: 'Name of the user' })
+  @ApiPropertyOptional({ description: 'Name of the user' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
   @Column({ type: 'varchar', length: 200, nullable: true })
   name?: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Phone number of the user',
     example: '0901234567',
   })
+  @IsString()
+  @IsOptional()
+  @MaxLength(20)
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
-  phone?: string | null;
+  phoneNumber?: string | null;
 
   @ApiProperty({ description: 'Email of the user' })
+  @IsEmail()
+  @IsNotEmpty()
+  @MaxLength(255)
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
   @Column({ type: 'boolean' })
+  @IsBoolean()
+  @IsOptional()
   emailVerified: boolean;
 
-
-
   @Column({ type: 'text', nullable: true })
+  @IsString()
+  @IsOptional()
   image?: string;
 
-  @ApiProperty({ description: 'ID of the avatar media' })
+  @ApiPropertyOptional({ description: 'ID of the avatar media' })
+  @IsUUID()
+  @IsOptional()
   @Column({ type: 'uuid', nullable: true })
   mediaId?: string | null;
 
-  @ApiProperty({ type: () => Media })
-  @OneToOne(() => Media)
+  @ApiPropertyOptional({ type: () => Media })
+  @OneToOne(() => Media, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'mediaId' })
   media?: Media;
 
-  @ApiProperty({ description: 'CCCD of the user' })
-  @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
-  cccd?: string | null;
-
-  @ApiProperty({ description: 'Date of birth of the user' })
-  @Column({ type: 'date', nullable: true })
-  dateOfBirth?: Date | null;
-
-  @ApiProperty({ description: 'Address of the user' })
-  @Column({ type: 'text', nullable: true })
-  address?: string | null;
-
-  @ApiProperty({ description: 'Is KYC verified' })
-  @Column({ type: 'boolean', nullable: true, default: false })
-  isVerifiedKyc?: boolean;
-
-  @ApiProperty({ enum: UserStatus, description: 'Status of the user' })
-  @Column({ type: 'enum', enum: UserStatus, default: UserStatus.ACTIVE })
-  status: UserStatus;
-
   @ApiProperty({ enum: Role })
+  @IsEnum(Role)
+  @IsOptional()
   @Column({ type: 'enum', enum: Role, default: Role.USER })
   role: Role;
 
   @Column({ type: 'text', default: 'en' })
+  @IsString()
+  @IsOptional()
   language: string;
 
   @OneToMany(() => Session, (session) => session.user)
@@ -75,14 +82,21 @@ export class User extends BaseEntity {
   accounts: Account[];
 
   @Column({ type: 'timestamptz', nullable: true })
+  @IsOptional()
   banExpires?: Date;
 
   @Column({ type: 'boolean', nullable: true })
+  @IsBoolean()
+  @IsOptional()
   banned?: boolean;
 
   @Column({ type: 'text', nullable: true })
+  @IsString()
+  @IsOptional()
   banReason?: string;
 
   @Column({ type: 'boolean', nullable: true, default: false })
+  @IsBoolean()
+  @IsOptional()
   twoFactorEnabled?: boolean;
 }
