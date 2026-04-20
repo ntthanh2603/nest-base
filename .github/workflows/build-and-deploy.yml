@@ -1,0 +1,81 @@
+name: CI/CD Deploy
+
+on:
+  push:
+    branches: [main]
+  # pull_request:
+  #   branches: [prod]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
+
+      # - name: Login GHCR
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
+
+      # - name: Extract metadata
+      #   id: meta
+      #   uses: docker/metadata-action@v5
+      #   with:
+      #     images: ghcr.io/${{ github.repository }}
+      #     tags: |
+      #       type=sha
+      #       type=raw,value=latest
+
+      # - name: Build and push
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: .
+      #     push: true
+      #     tags: ${{ steps.meta.outputs.tags }}
+      #     cache-from: type=gha
+      #     cache-to: type=gha,mode=max
+
+      # - name: Copy config files to server
+      #   uses: appleboy/scp-action@v0.1.7
+      #   with:
+      #     host: ${{ secrets.SERVER_HOST }}
+      #     username: ${{ secrets.SERVER_USER }}
+      #     password: ${{ secrets.SERVER_PASSWORD }}
+      #     source: 'docker-compose.prod.yml,fluent-bit/**,seaweedfs/**'
+      #     target: ${{ secrets.PROJECT_DIR || '/root/nest-base' }}
+
+      # - name: Deploy to Server
+      #   uses: appleboy/ssh-action@v1.0.3
+      #   with:
+      #     host: ${{ secrets.SERVER_HOST }}
+      #     username: ${{ secrets.SERVER_USER }}
+      #     password: ${{ secrets.SERVER_PASSWORD }}
+      #     script: |
+      #       set -e
+      #       cd ${{ secrets.PROJECT_DIR || '/root/nest-base' }}
+
+      #       echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      #       docker compose -f docker-compose.prod.yml pull -q app
+      #       docker compose -f docker-compose.prod.yml up -d --no-build app 2>&1
+
+      # - name: Send Slack notification
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+      #     status: ${{ job.status }}
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+      #   if: always()
