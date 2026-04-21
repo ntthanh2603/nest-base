@@ -13,7 +13,6 @@ import {
 import { v7 as uuidv7 } from 'uuid';
 import type { ConfigService } from '@nestjs/config';
 import type { Pool } from 'pg';
-import type { MailService } from '@/services/mail/mail.service';
 import type { RedisService } from '@/services/redis/redis.service';
 import type { KafkaService } from '@/services/kafka/kafka.service';
 import { KafkaTopic } from '@/services/kafka/kafka.enum';
@@ -24,7 +23,6 @@ export type Auth = ReturnType<typeof getAuth>;
 export const getAuth = (
   database: Pool,
   configService: ConfigService,
-  mailService: MailService,
   redisService: RedisService,
   kafkaService: KafkaService,
 ) =>
