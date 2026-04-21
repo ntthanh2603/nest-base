@@ -1,27 +1,28 @@
-import { NestFactory, Reflector } from '@nestjs/core';
-import type { NestExpressApplication } from '@nestjs/platform-express';
-import { AppModule } from './app.module';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   ClassSerializerInterceptor,
   Logger,
   ValidationPipe,
 } from '@nestjs/common';
-import cookieParser from 'cookie-parser';
-import compression from 'compression';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-
-import { SanitizeRequestPipe } from './commons/pipes/sanitize-request.pipe';
-
+import { NestFactory, Reflector } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { OpenAPIObject } from '@nestjs/swagger';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AuthService as BetterAuthService } from '@thallesp/nestjs-better-auth';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import { AppModule } from './app.module';
 import {
   API_GLOBAL_PREFIX,
   APP_NAME,
   DEFAULT_PORT,
 } from './commons/constants/app.constants';
-import * as path from 'path';
-import * as fs from 'fs';
 import { LoggerService } from './commons/logger/logger.service';
 import { correlationIdMiddleware } from './commons/middlewares/correlation-id.middleware';
+import { SanitizeRequestPipe } from './commons/pipes/sanitize-request.pipe';
+import type { BetterAuthSchema } from './modules/auth/better-auth.interface';
 
 async function bootstrap() {
   // suppressBetterAuthLogs();
@@ -82,11 +83,65 @@ async function bootstrap() {
     )
     .setExternalDoc('Authentication Docs', 'auth/docs')
     .build();
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup(`${API_GLOBAL_PREFIX}/docs`, app, documentFactory, {
+
+  const documentFactory = async (): Promise<OpenAPIObject> => {
+    const mainDocument = SwaggerModule.createDocument(app, config);
+    try {
+      const authService = app.get(BetterAuthService);
+      const auth = authService.instance as {
+        api: {
+          generateOpenAPISchema: () => Promise<BetterAuthSchema>;
+        };
+      };
+
+      if (!auth?.api?.generateOpenAPISchema) {
+        return mainDocument;
+      }
+
+      const authSchema = await auth.api.generateOpenAPISchema();
+
+      // Map paths of Auth to add prefix /auth
+      const authPaths: Record<string, unknown> = {};
+      Object.entries(authSchema.paths).forEach(([key, value]) => {
+        authPaths[`${API_GLOBAL_PREFIX}/auth${key}`] = value;
+      });
+
+      const mergedComponents = {
+        ...mainDocument.components,
+        ...authSchema.components,
+        schemas: {
+          ...mainDocument.components?.schemas,
+          ...authSchema.components?.schemas,
+        },
+      };
+
+      return {
+        ...mainDocument,
+        paths: { ...mainDocument.paths, ...authPaths },
+        components: mergedComponents,
+      } as unknown as OpenAPIObject;
+    } catch (e: unknown) {
+      Logger.error(
+        'Failed to merge Better Auth schema',
+        e instanceof Error ? e.stack : undefined,
+        'Bootstrap',
+      );
+      return mainDocument;
+    }
+  };
+
+  const mergedDocument = await documentFactory();
+
+  SwaggerModule.setup(`${API_GLOBAL_PREFIX}/docs`, app, () => mergedDocument, {
     swaggerOptions: {
       persistAuthorization: true,
     },
+  });
+
+  // Endpoint for OpenAPI JSON (dùng cho frontend)
+  const server = app.getHttpAdapter().getInstance();
+  server.get(`/${API_GLOBAL_PREFIX}/openapi.json`, (req, res) => {
+    res.json(mergedDocument);
   });
 
   const pathOutputOpenApi = './open-api.json';
@@ -97,7 +152,7 @@ async function bootstrap() {
     fs.mkdirSync(directoryPath, { recursive: true });
   }
 
-  fs.writeFileSync(pathOutputOpenApi, JSON.stringify(documentFactory()));
+  fs.writeFileSync(pathOutputOpenApi, JSON.stringify(mergedDocument));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('APP_PORT') ?? DEFAULT_PORT;

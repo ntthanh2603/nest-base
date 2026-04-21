@@ -34,5 +34,6 @@ import { KafkaService } from '@/services/kafka/kafka.service';
       }),
     }),
   ],
+  exports: [BetterAuthModule],
 })
 export class AuthModule {}
