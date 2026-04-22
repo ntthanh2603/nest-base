@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory, Reflector } from '@nestjs/core';
@@ -109,13 +108,23 @@ async function bootstrap() {
     `/${API_GLOBAL_PREFIX}/docs`,
     apiReference({
       spec: { content: mainDocument },
-      theme: 'deepSpace',
+      theme: 'purple',
       layout: 'modern',
-      authentication: {
-        preferredSecurityScheme: 'bearer',
-      },
+      // authentication: {
+      //   preferredSecurityScheme: 'bearer',
+      // },
     }),
   );
+
+  // Expose Main OpenAPI JSON
+  app
+    .getHttpAdapter()
+    .get(
+      `/${API_GLOBAL_PREFIX}/docs-json`,
+      (req: express.Request, res: express.Response) => {
+        res.json(mainDocument);
+      },
+    );
 
   //  BetterAuth APIs (Isolated for performance)
   try {
@@ -160,17 +169,14 @@ async function bootstrap() {
         }),
       );
 
-      // Expose Auth OpenAPI JSON
       app
         .getHttpAdapter()
         .get(
-          `/${API_GLOBAL_PREFIX}/auth/openapi.json`,
+          `/${API_GLOBAL_PREFIX}/auth/docs-json`,
           (req: express.Request, res: express.Response) => {
             res.json(authDocument);
           },
         );
-
-      fs.writeFileSync('./open-api-auth.json', JSON.stringify(authDocument));
     }
   } catch (error) {
     logger.warn(
@@ -178,18 +184,6 @@ async function bootstrap() {
     );
   }
 
-  // Expose Main OpenAPI JSON
-  app
-    .getHttpAdapter()
-    .get(
-      `/${API_GLOBAL_PREFIX}/openapi.json`,
-      (req: express.Request, res: express.Response) => {
-        res.json(mainDocument);
-      },
-    );
-
-  // Persist schema for external consumers
-  fs.writeFileSync('./open-api.json', JSON.stringify(mainDocument));
 
   await app.listen(port);
   logger.log(`Nest-Base is running on url http://localhost:${port}`);
