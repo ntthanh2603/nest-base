@@ -7,9 +7,16 @@ FROM base AS builder
 
 WORKDIR /app
 
-COPY . .
-# Use bun for faster installation, it works with package-lock.json
+# 1. Copy package files first
+COPY package*.json bun.lockb* ./
+
+# 2. Use bun for faster installation
 RUN bun install
+
+# 3. Copy the rest of the source code
+COPY . .
+
+# 4. Build the project
 RUN bun run build
 
 # Clean bun cache and remove source files to save space
