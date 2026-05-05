@@ -15,8 +15,9 @@ npm run test:cov       # Run unit tests with coverage
 npm run test:e2e       # Run E2E tests
 
 # Database
-npm run migration:run  # Run migrations
-npm run migration:generate -- -n Name  # Generate migration
+task migration:generate name=Name  # Generate migration
+task migration:run                 # Run migrations
+task migration:revert              # Revert last migration
 
 # Linting
 npm run lint           # Check and fix lint issues

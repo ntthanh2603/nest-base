@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "app-service",
+      "credentials": [
+        {
+          "accessKey": "admin",
+          "secretKey": "admin"
+        }
+      ],
+      "actions": ["Read", "Write", "List", "Tagging", "Admin"]
+    }
+  ]
+}
